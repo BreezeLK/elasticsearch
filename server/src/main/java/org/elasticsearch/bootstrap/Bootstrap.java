@@ -218,6 +218,7 @@ final class Bootstrap {
             throw new BootstrapException(e);
         }
 
+        // 核心代码，构建了一个节点
         node = new Node(environment) {
             @Override
             protected void validateNodeBeforeAcceptingRequests(

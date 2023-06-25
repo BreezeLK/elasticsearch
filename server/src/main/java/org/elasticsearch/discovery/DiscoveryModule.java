@@ -88,6 +88,9 @@ public class DiscoveryModule {
 
     private final Discovery discovery;
 
+    // 他依赖了很多其他的模块
+    // settings（选举模块）、thread pool（线程池模块）、transport（传输模块）、network（网络模块）
+    // master（选举模块）、registry（注册模块）、allocation（分配模块）
     public DiscoveryModule(Settings settings, ThreadPool threadPool, TransportService transportService,
                            NamedWriteableRegistry namedWriteableRegistry, NetworkService networkService, MasterService masterService,
                            ClusterApplier clusterApplier, ClusterSettings clusterSettings, List<DiscoveryPlugin> plugins,
@@ -149,6 +152,8 @@ public class DiscoveryModule {
             throw new IllegalArgumentException("Unknown election strategy " + ELECTION_STRATEGY_SETTING.get(settings));
         }
 
+        // 两种默认的集群发现的机制
+        // zen、single-node，单节点和集群的发现模式
         if (ZEN2_DISCOVERY_TYPE.equals(discoveryType) || SINGLE_NODE_DISCOVERY_TYPE.equals(discoveryType)) {
             discovery = new Coordinator(NODE_NAME_SETTING.get(settings),
                 settings, clusterSettings,
