@@ -146,6 +146,7 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
     // a flag that should be used only for testing
     private final boolean sendLeaveRequest;
 
+    // master选举的子模块，隶属于ZenDiscovery集群发现模块
     private final ElectMasterService electMaster;
 
     private final boolean masterElectionIgnoreNonMasters;
@@ -801,8 +802,14 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
         }
     }
 
+    /**
+     * 是ZenDiscovery里面最核心的一个方法，里面包含了ping请求，以及master选举的过程
+     * @return
+     */
     private DiscoveryNode findMaster() {
         logger.trace("starting to ping");
+        // 从方法名称就可以看出来，肯定是把他能发现的节点都给ping一遍
+        // 然后拿到ping的结果集合
         List<ZenPing.PingResponse> fullPingResponses = pingAndWait(pingTimeout).toList();
         if (fullPingResponses == null) {
             logger.trace("No full ping responses");
@@ -820,17 +827,28 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
             logger.trace("full ping responses:{}", sb);
         }
 
+        // 拿到本地节点
         final DiscoveryNode localNode = transportService.getLocalNode();
 
         // add our selves
         assert fullPingResponses.stream().map(ZenPing.PingResponse::node)
             .filter(n -> n.equals(localNode)).findAny().isPresent() == false;
 
+        // 对自己本地节点也ping了一下，然后拿到最终对自己节点以及对其他所有集群节点的一个ping响应
         fullPingResponses.add(new ZenPing.PingResponse(localNode, null, this.clusterState()));
 
         // filter responses
+        // 后续一定是要根据ping的结果，梳理出来能够参加master选举的节点
+        // 这里肯定是要过滤一下，判断一下，非master.node的节点，能否参加master选举
+        // 正常情况下，肯定是不能允许非master.node的节点，来参与选举的
         final List<ZenPing.PingResponse> pingResponses = filterPingResponses(fullPingResponses, masterElectionIgnoreNonMasters, logger);
 
+        // 接下来构建一个master候选节点的列表
+        // 依托这个master候选节点来选举出一个master来
+        // 在集群发现的过程中，你会去ping所有节点，那些节点被ping的时候，如果他当时已经认定了一个master了
+        // 之前集群可能已经启动过了，已经选举出来过master了，集群里其他的节点此时都认定好一个master了
+        // 如果你当前这个节点启动，你去ping集群里其他的节点，人家会告诉你说，master已经有了
+        // 把所有人认定好的master都放到一个activeMaster列表里去，保存起来
         List<DiscoveryNode> activeMasters = new ArrayList<>();
         for (ZenPing.PingResponse pingResponse : pingResponses) {
             // We can't include the local node in pingMasters list, otherwise we may up electing ourselves without
@@ -841,6 +859,8 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
         }
 
         // nodes discovered during pinging
+        // 根据每个节点的ping结果，看看，哪些节点是master.node=true的节点，master候选节点
+        // 如果是master候选节点，就加入到masterCandidates里面去
         List<ElectMasterService.MasterCandidate> masterCandidates = new ArrayList<>();
         for (ZenPing.PingResponse pingResponse : pingResponses) {
             if (pingResponse.node().isMasterNode()) {
@@ -848,7 +868,24 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
             }
         }
 
+        // 在这里可以先思考一下，如果是集群之前启动过了，已经选举出来过master了
+        // 此时activeMasters集合肯定不是空，此时就可以根据这个集合直接确定master了，你就不需要去选举了
+        // 但是如果是一个空的集合刚开始启动的时候，肯定是ping其他节点，人家是不会认定master
+        // activeMasters集合刚开始按理说应该是空的，此时就应该根据masterCandidates来进行选举
+
+        // 正常情况下，一个集群才刚启动，此时activeMasters肯定是空的，此时必须进行master选举
         if (activeMasters.isEmpty()) {
+            // 先做一个判断，当前是否拥有足够的master候选节点
+            // 这个事儿其实非常的至关重要，他是解决master-slave架构里的脑裂问题的关键点
+            // 什么叫做脑裂，比如说ES集群里有5台机器，5个节点，但是因为网络问题，发生了网络分区
+            // network partition，2个节点可以ping通发现对方，组成了一个小集群；另外3个节点可以相互ping通对方，组成了另外一个小集群
+            // 有可能2个节点选举出了一个master，另外3个节点选举出了另外一个master，master-slave架构的分布式系统里，出现了两个master
+            // 脑裂，brain split
+
+            // 一般是如何解决脑裂问题的？选举master之前的quorum机制
+            // 什么情况下可以进行master选举呢？必须是说你当前发现的节点组成的及群里，包含的节点数量达到了你总节点数量的quorum的比例
+            // quorum = n / 2 + 1，超过集群总数量的一半
+
             if (electMaster.hasEnoughCandidates(masterCandidates)) {
                 final ElectMasterService.MasterCandidate winner = electMaster.electMaster(masterCandidates);
                 logger.trace("candidate {} won election", winner);
