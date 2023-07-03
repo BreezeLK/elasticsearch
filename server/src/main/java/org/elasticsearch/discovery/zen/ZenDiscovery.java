@@ -885,7 +885,11 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
             // 一般是如何解决脑裂问题的？选举master之前的quorum机制
             // 什么情况下可以进行master选举呢？必须是说你当前发现的节点组成的及群里，包含的节点数量达到了你总节点数量的quorum的比例
             // quorum = n / 2 + 1，超过集群总数量的一半
+            // 要求你的当前集群里发现的节点的数量，必须已经达到quorum了，超过集群总节点数量的一半
+            // 此时才能进行master选举
 
+            // ES也是同理，他要选举master，必须确保是否具备足够的master候选节点了，才能进行master选举
+            // 否则胡乱选举，可能也会出现集群的脑裂问题
             if (electMaster.hasEnoughCandidates(masterCandidates)) {
                 final ElectMasterService.MasterCandidate winner = electMaster.electMaster(masterCandidates);
                 logger.trace("candidate {} won election", winner);

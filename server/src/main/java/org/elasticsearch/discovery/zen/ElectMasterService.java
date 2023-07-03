@@ -126,11 +126,17 @@ public class ElectMasterService {
         if (candidates.isEmpty()) {
             return false;
         }
+        // minimum.master.nodes，是一个可以配置的参数，这个参数如果设置为0
+        // 默认情况下，就是在master选举的时候，不考虑quorum机制，随便有几个master节点都可以发起选举
+        // 一般来说，如果你就是单节点的话，这个是可以设置为0的
         if (minimumMasterNodes < 1) {
             return true;
         }
         assert candidates.stream().map(MasterCandidate::getNode).collect(Collectors.toSet()).size() == candidates.size() :
             "duplicates ahead: " + candidates;
+        // minimum.master.nodes，作为一个参数是让我们来设置的，我们应该如何设置他呢？
+        // 我们一般在配置ES集群的时候，都是知道集群里有几个节点的，此时我们可以自己计算出来quorum数量
+        // 我们可以把minimum.master.nodes设置为quorum的数量就可以了
         return candidates.size() >= minimumMasterNodes;
     }
 
