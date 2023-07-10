@@ -91,6 +91,10 @@ public class ElectMasterService {
         public static int compare(MasterCandidate c1, MasterCandidate c2) {
             // we explicitly swap c1 and c2 here. the code expects "better" is lower in a sorted
             // list, so if c2 has a higher cluster state version, it needs to come first.
+            // 会把两个节点的cluster state version进行比较
+            // 集群状态的版本号，按照常理来推测，集群状态版本号，应该是从小到大累加的
+            // 集群状态最新的节点，就应该被选拔为master
+            // 优先，第一步是按照集群状态版本号来进行排序的，集群状态最新的节点一定会被排到最前面去
             int ret = Long.compare(c2.clusterStateVersion, c1.clusterStateVersion);
             if (ret == 0) {
                 ret = compareNodes(c1.getNode(), c2.getNode());
@@ -145,9 +149,12 @@ public class ElectMasterService {
      * if no master has been elected.
      */
     public MasterCandidate electMaster(Collection<MasterCandidate> candidates) {
+        // 每个节点都会通过ping发现其他的节点，当你发现了大多数的节点之后，此时就满足了quorum数量
+        // 这个时候每个节点都可以开始发起master选举了，来选举自己认为的master出来
         assert hasEnoughCandidates(candidates);
         List<MasterCandidate> sortedCandidates = new ArrayList<>(candidates);
         sortedCandidates.sort(MasterCandidate::compare);
+        // 最终返回的master，就是当前这个节点发现的master candidate里最小的一个
         return sortedCandidates.get(0);
     }
 
@@ -218,12 +225,15 @@ public class ElectMasterService {
 
     /** master nodes go before other nodes, with a secondary sort by id **/
      private static int compareNodes(DiscoveryNode o1, DiscoveryNode o2) {
+         // 如果有一个是master.node=true的节点，另外一个不是，此时返回负数，让master.node=true的节点排到前面去
         if (o1.isMasterNode() && !o2.isMasterNode()) {
             return -1;
         }
         if (!o1.isMasterNode() && o2.isMasterNode()) {
             return 1;
         }
+        // 最终比较的就是节点id的大小
+         // 优先是让集群状态最新的节点排在最前面，其次是master.node=true的节点排在前面，最后是字符串id值最小的排在最前面
         return o1.getId().compareTo(o2.getId());
     }
 }
