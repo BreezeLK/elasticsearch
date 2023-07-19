@@ -213,6 +213,7 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
                 }
         });
 
+        // 对于任何一个节点来说，都有一个MasterFaultDetection，也有一个NodesFaultDetection
         this.masterFD = new MasterFaultDetection(settings, threadPool, transportService, this::clusterState, masterService, clusterName);
         this.masterFD.addListener(new MasterNodeFailureListener());
         this.nodesFD = new NodesFaultDetection(settings, threadPool, transportService, this::clusterState, clusterName);
@@ -436,6 +437,7 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
      * or spawn a new join thread upon failure to do so.
      */
     private void innerJoinCluster() {
+        // 节点启动之后，必须要去加入一个集群，先进行ping发现其他的节点，以及选举出来一个自己认为的master
         DiscoveryNode masterNode = null;
         final Thread currentThread = Thread.currentThread();
         nodeJoinController.startElectionContext();
@@ -448,9 +450,14 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
             return;
         }
 
+        // 如果选举出来的master就是本地节点他自己
         if (transportService.getLocalNode().equals(masterNode)) {
+            // 他自己就是一个master，而且他要求会去等待多少个节点必须要加入自己所在的集群
+            // quorum数量-1，quorum数量里是包含了他自己的，他自己是master，自己就在集群里的
             final int requiredJoins = Math.max(0, electMaster.minimumMasterNodes() - 1); // we count as one
             logger.debug("elected as master, waiting for incoming joins ([{}] needed)", requiredJoins);
+            // 等待自己被真正选举为一个master，至少要有requiredJoins这么多数量的节点都发消息给他说，我们都认为你就是master，
+            // 才可以真正认为自己就是master了
             nodeJoinController.waitToBeElectedAsMaster(requiredJoins, masterElectionWaitForJoinsTimeout,
                     new NodeJoinController.ElectionCallback() {
                         @Override
@@ -891,6 +898,7 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
             // ES也是同理，他要选举master，必须确保是否具备足够的master候选节点了，才能进行master选举
             // 否则胡乱选举，可能也会出现集群的脑裂问题
             if (electMaster.hasEnoughCandidates(masterCandidates)) {
+                // 刚开始集群里各个节点启动，选举出来的master一般来说都是字符串id值最小的节点
                 final ElectMasterService.MasterCandidate winner = electMaster.electMaster(masterCandidates);
                 logger.trace("candidate {} won election", winner);
                 return winner.getNode();

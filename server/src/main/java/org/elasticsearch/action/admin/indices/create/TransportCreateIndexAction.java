@@ -80,6 +80,10 @@ public class TransportCreateIndexAction extends TransportMasterNodeAction<Create
             cause = "api";
         }
 
+        // 这些具体的action就是后续如果ES收到指定的http restful的请求的时候
+        // 就是会用每个请求对应的action来进行请求的处理
+        // 对于这里来说，他就是用来处理create index的请求的
+
         final String indexName = indexNameExpressionResolver.resolveDateMathExpression(request.index());
         final CreateIndexClusterStateUpdateRequest updateRequest =
             new CreateIndexClusterStateUpdateRequest(request, cause, indexName, request.index())
