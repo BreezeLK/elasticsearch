@@ -85,6 +85,9 @@ public class TransportCreateIndexAction extends TransportMasterNodeAction<Create
         // 对于这里来说，他就是用来处理create index的请求的
 
         final String indexName = indexNameExpressionResolver.resolveDateMathExpression(request.index());
+
+        // ES有一个module，cluster module，负责集群的管理
+        // 包括集群的状态一些同步
         final CreateIndexClusterStateUpdateRequest updateRequest =
             new CreateIndexClusterStateUpdateRequest(request, cause, indexName, request.index())
                 .ackTimeout(request.timeout()).masterNodeTimeout(request.masterNodeTimeout())

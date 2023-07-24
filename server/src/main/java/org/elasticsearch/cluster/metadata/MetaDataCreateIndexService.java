@@ -187,6 +187,8 @@ public class MetaDataCreateIndexService {
         }
     }
 
+    // cluster state，集群元数据，ES集群里有哪些索引，包括索引分配了哪些shard，shard有几个副本，
+    // 各个shard所在的节点是谁，等等，这些就是ES集群里最核心的元数据，他们统称为cluster state
     /**
      * Creates an index in the cluster state and waits for the specified number of shard copies to
      * become active (as specified in {@link CreateIndexClusterStateUpdateRequest#waitForActiveShards()})
@@ -203,6 +205,12 @@ public class MetaDataCreateIndexService {
      */
     public void createIndex(final CreateIndexClusterStateUpdateRequest request,
                             final ActionListener<CreateIndexClusterStateUpdateResponse> listener) {
+        // 首先应该是先在master的内存里的cluster state里去创建对应的索引
+        // 如果创建成功了，response.isAcknowledged返回true，此时可以接着去等待你所有的shard和副本都被启动
+        // shard和副本如果都启动了，而且没超时，response.isShardAcked返回true
+
+        // onlyCreateIndex,only的意思就是说，仅仅是先在cluster state里创建索引
+
         onlyCreateIndex(request, ActionListener.wrap(response -> {
             if (response.isAcknowledged()) {
                 activeShardsObserver.waitForActiveShards(new String[]{request.index()}, request.waitForActiveShards(), request.ackTimeout(),
@@ -225,6 +233,10 @@ public class MetaDataCreateIndexService {
         Settings build = updatedSettingsBuilder.put(request.settings()).normalizePrefix(IndexMetaData.INDEX_SETTING_PREFIX).build();
         indexScopedSettings.validate(build, true); // we do validate here - index setting must be consistent
         request.settings(build);
+
+        // 实际上来说，在进行集群的元数据维护的时候，比如说在cluster state里创建索引
+        // 并不都是同步执行的，底层都是依托于cluster module，提交异步任务，异步线程去完成的，回调通知结果
+        // cluster module
         clusterService.submitStateUpdateTask(
                 "create-index [" + request.index() + "], cause [" + request.cause() + "]",
                 new IndexCreationTask(

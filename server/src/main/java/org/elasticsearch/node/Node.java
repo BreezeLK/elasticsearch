@@ -477,9 +477,12 @@ public class Node implements Closeable {
                 threadPool, pluginsService.filterPlugins(ActionPlugin.class), client, circuitBreakerService, usageService);
             modules.add(actionModule);
 
+            // ActionModule里构建出来的RestController，会返回给别人来使用
             final RestController restController = actionModule.getRestController();
 
             // network module，负责网络通信
+            // 网络请求的模块
+            // 很可能说，这个模块是负责对外去提供一个内嵌的http服务器的，接收http restful请求的
             final NetworkModule networkModule = new NetworkModule(settings, false, pluginsService.filterPlugins(NetworkPlugin.class),
                 threadPool, bigArrays, pageCacheRecycler, circuitBreakerService, namedWriteableRegistry, xContentRegistry,
                 networkService, restController);
